@@ -1,0 +1,44 @@
+{
+  "name": "btw-opencode",
+  "version": "0.0.1",
+  "description": "Fork session and run prompts in background for OpenCode",
+  "type": "module",
+  "main": "dist/btw-opencode.js",
+  "exports": {
+    ".": "./dist/btw-opencode.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outfile dist/btw-opencode.js --target node",
+    "dev": "bun build src/index.ts --outfile dist/btw-opencode.js --target node --watch",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "btw",
+    "fork",
+    "background",
+    "session"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/user/btw-opencode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/user/btw-opencode/issues"
+  },
+  "homepage": "https://github.com/user/btw-opencode#readme",
+  "devDependencies": {
+    "@opencode-ai/plugin": "latest",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}
