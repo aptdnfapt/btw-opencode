@@ -2,6 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { getForkedSession, setForkedSession, updateLastUsed, getAllTrackedSessions } from "./storage.js"
 
 const BTW_COMMAND = "btw"
+const BYTHEWAY_PREFIX = "#BTW "
 
 // Helper to show toast notification
 function showToast(
@@ -51,7 +52,26 @@ export const BTWPlugin: Plugin = async (ctx) => {
 
       // Check if this is one of our tracked BTW forked sessions
       if (trackedForkedSessions.has(idleSessionID)) {
-        showToast(client, "BTW Complete", "Background task finished. Run /session to see it.", "success", 8000)
+        // Try to get session title for better notification
+        let titlePreview = "background task"
+        try {
+          const sessionResult = await (client as any).session.get({
+            path: { id: idleSessionID },
+          })
+          const title = sessionResult?.data?.title || sessionResult?.title || ""
+          if (title.startsWith(BYTHEWAY_PREFIX)) {
+            titlePreview = title.slice(BYTHEWAY_PREFIX.length)
+          } else if (title) {
+            titlePreview = title
+          }
+          if (titlePreview.length > 25) {
+            titlePreview = titlePreview.slice(0, 25) + "..."
+          }
+        } catch (err) {
+            console.error("BTW: Failed to fetch session title for idle notification", err)
+          }
+
+        showToast(client, "BTW Complete", `${titlePreview} finished. Run /session to see it.`, "success", 8000)
       }
     },
 
@@ -109,13 +129,19 @@ export const BTWPlugin: Plugin = async (ctx) => {
           await setForkedSession(input.sessionID, forkedSessionID)
           trackedForkedSessions.add(forkedSessionID)
 
-          // Update forked session title
-          const titlePreview = prompt.slice(0, 50) + (prompt.length > 50 ? "..." : "")
+          // Get parent session to inherit its title
+          const parentSessionResult = await (client as any).session.get({
+            path: { id: input.sessionID },
+          })
+          const parentTitle = parentSessionResult?.data?.title || parentSessionResult?.title || "Untitled"
+
+          // Update forked session title with #bytheway prefix
+          const newTitle = `${BYTHEWAY_PREFIX}${parentTitle}`
           ;(client as any).session
             .update({
               path: { id: forkedSessionID },
               body: {
-                title: `BTW: ${titlePreview}`,
+                title: newTitle,
               },
             })
             .catch((err: any) => {
@@ -134,8 +160,9 @@ export const BTWPlugin: Plugin = async (ctx) => {
               console.error("BTW: Failed to send prompt to forked session", err)
             })
 
-          // Show confirmation toast
-          showToast(client, "BTW", "Session started. Run /session to see it.", "info", 5000)
+          // Show confirmation toast with first 20 chars of parent title
+          const titlePreview = parentTitle.length > 20 ? parentTitle.slice(0, 20) + "..." : parentTitle
+          showToast(client, "BTW", `Forked session started: ${titlePreview}`, "info", 5000)
         }
 
         throw new Error("Command handled by btw plugin")
