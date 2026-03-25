@@ -2,7 +2,8 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { getForkedSession, setForkedSession, updateLastUsed, getAllTrackedSessions } from "./storage.js"
 
 const BTW_COMMAND = "btw"
-const BYTHEWAY_PREFIX = "#BTW "
+const BTW_PREFIX = "#BTW "
+const HANDLED_ERROR = "Command handled by btw plugin"
 
 // Helper to show toast notification
 function showToast(
@@ -59,8 +60,8 @@ export const BTWPlugin: Plugin = async (ctx) => {
             path: { id: idleSessionID },
           })
           const title = sessionResult?.data?.title || sessionResult?.title || ""
-          if (title.startsWith(BYTHEWAY_PREFIX)) {
-            titlePreview = title.slice(BYTHEWAY_PREFIX.length)
+          if (title.startsWith(BTW_PREFIX)) {
+            titlePreview = title.slice(BTW_PREFIX.length)
           } else if (title) {
             titlePreview = title
           }
@@ -68,8 +69,8 @@ export const BTWPlugin: Plugin = async (ctx) => {
             titlePreview = titlePreview.slice(0, 25) + "..."
           }
         } catch (err) {
-            console.error("BTW: Failed to fetch session title for idle notification", err)
-          }
+          console.error("BTW: Failed to fetch session title for idle notification", err)
+        }
 
         showToast(client, "BTW Complete", `${titlePreview} finished. Run /session to see it.`, "success", 8000)
       }
@@ -84,98 +85,115 @@ export const BTWPlugin: Plugin = async (ctx) => {
       // Show usage if no prompt provided
       if (!prompt) {
         showToast(client, "BTW", "Usage: /btw <your prompt>", "warning", 5000)
-        throw new Error("Command handled by btw plugin")
+        throw new Error(HANDLED_ERROR)
       }
 
       try {
-        // Check if we already have a forked BTW session for this parent
-        const existingMapping = await getForkedSession(input.sessionID)
-        let forkedSessionID: string
+        const isSessionNotFound = (err: any): boolean => {
+          const status = err?.status ?? err?.response?.status ?? err?.data?.status
+          const message = String(err?.message ?? "").toLowerCase()
+          const dataMessage = String(err?.data?.message ?? "").toLowerCase()
+          return status === 404 || message.includes("not found") || message.includes("notfound") || dataMessage.includes("not found")
+        }
 
-        if (existingMapping) {
-          // Reuse existing forked session
-          forkedSessionID = existingMapping.forkedSessionID
-          await updateLastUsed(input.sessionID)
+        // Get parent session title once so new/re-forked sessions inherit it
+        const parentSessionResult = await (client as any).session.get({
+          path: { id: input.sessionID },
+        })
+        const parentTitle = parentSessionResult?.data?.title || parentSessionResult?.title || "Untitled"
+        const titlePreview = parentTitle.length > 20 ? parentTitle.slice(0, 20) + "..." : parentTitle
 
-          // Send prompt to existing forked session (fire and forget)
-          ;(client as any).session
-            .prompt({
-              path: { id: forkedSessionID },
-              body: {
-                parts: [{ type: "text", text: prompt }],
-              },
-            })
-            .catch((err: any) => {
-              console.error("BTW: Failed to send prompt to existing forked session", err)
-            })
-
-          // Show confirmation toast
-          showToast(client, "BTW", "Prompt sent to background session. Run /session to see it.", "info", 5000)
-        } else {
-          // First time - fork the session
+        const createForkedSession = async (): Promise<string> => {
           const forkResult = await (client as any).session.fork({
             path: { id: input.sessionID },
+            throwOnError: true,
           })
 
           const forkedData = forkResult?.data || forkResult
           if (!forkedData?.id) {
             showToast(client, "BTW Error", "Failed to fork session", "error", 5000)
-            throw new Error("Command handled by btw plugin")
+            throw new Error(HANDLED_ERROR)
           }
 
-          forkedSessionID = forkedData.id
+          const newForkedSessionID = forkedData.id
+          await setForkedSession(input.sessionID, newForkedSessionID)
+          trackedForkedSessions.add(newForkedSessionID)
 
-          // Track this forked session
-          await setForkedSession(input.sessionID, forkedSessionID)
-          trackedForkedSessions.add(forkedSessionID)
-
-          // Get parent session to inherit its title
-          const parentSessionResult = await (client as any).session.get({
-            path: { id: input.sessionID },
-          })
-          const parentTitle = parentSessionResult?.data?.title || parentSessionResult?.title || "Untitled"
-
-          // Update forked session title with #bytheway prefix
-          const newTitle = `${BYTHEWAY_PREFIX}${parentTitle}`
-          ;(client as any).session
+          const newTitle = `${BTW_PREFIX}${parentTitle}`
+          await (client as any).session
             .update({
-              path: { id: forkedSessionID },
+              path: { id: newForkedSessionID },
               body: {
                 title: newTitle,
               },
+              throwOnError: true,
             })
             .catch((err: any) => {
               console.error("BTW: Failed to update session title", err)
             })
 
-          // Send prompt to forked session (fire and forget)
-          ;(client as any).session
-            .prompt({
-              path: { id: forkedSessionID },
-              body: {
-                parts: [{ type: "text", text: prompt }],
-              },
-            })
-            .catch((err: any) => {
-              console.error("BTW: Failed to send prompt to forked session", err)
-            })
-
-          // Show confirmation toast with first 20 chars of parent title
-          const titlePreview = parentTitle.length > 20 ? parentTitle.slice(0, 20) + "..." : parentTitle
-          showToast(client, "BTW", `Forked session started: ${titlePreview}`, "info", 5000)
+          return newForkedSessionID
         }
 
-        throw new Error("Command handled by btw plugin")
+        const sendPromptAsync = async (targetSessionID: string) => {
+          await (client as any).session.promptAsync({
+            path: { id: targetSessionID },
+            body: {
+              parts: [{ type: "text", text: prompt }],
+            },
+            throwOnError: true,
+          })
+        }
+
+        // Check if we already have a forked BTW session for this parent
+        const existingMapping = await getForkedSession(input.sessionID)
+        let forkedSessionID: string
+
+        if (existingMapping) {
+          // Reuse existing forked session if it still exists
+          forkedSessionID = existingMapping.forkedSessionID
+          try {
+            await (client as any).session.get({
+              path: { id: forkedSessionID },
+              throwOnError: true,
+            })
+          } catch (err) {
+            if (!isSessionNotFound(err)) {
+              throw err
+            }
+            // Stored fork was deleted, silently create a new one
+            forkedSessionID = await createForkedSession()
+          }
+          await updateLastUsed(input.sessionID)
+        } else {
+          // First time - fork the session
+          forkedSessionID = await createForkedSession()
+        }
+
+        // Send prompt in background; if fork vanished, re-fork and retry once
+        try {
+          await sendPromptAsync(forkedSessionID)
+        } catch (err) {
+          if (!isSessionNotFound(err)) {
+            throw err
+          }
+          forkedSessionID = await createForkedSession()
+          await sendPromptAsync(forkedSessionID)
+        }
+
+        showToast(client, "BTW", `Forked session started: ${titlePreview}`, "info", 5000)
+
+        throw new Error(HANDLED_ERROR)
       } catch (err) {
         // Re-throw if it's our "handled" marker
-        if (err instanceof Error && err.message === "Command handled by btw plugin") {
+        if (err instanceof Error && err.message === HANDLED_ERROR) {
           throw err
         }
 
         // Actual error - show to user
         console.error("BTW: Command failed", err)
         showToast(client, "BTW Error", err instanceof Error ? err.message : String(err), "error", 5000)
-        throw new Error("Command handled by btw plugin")
+        throw new Error(HANDLED_ERROR)
       }
     },
   }
