@@ -63,6 +63,10 @@ The forked session will:
 
 If the forked session is deleted, the plugin will automatically create a new one and retry.
 
+## Demo
+
+[![Watch the demo on X/Twitter](https://img.shields.io/badge/Watch%20Demo-X/Twitter-1DA1F2?style=for-the-badge&logo=x&logoColor=white)](https://x.com/ig_idcbtw/status/2036773739363434930?s=20)
+
 ## License
 
 MIT
