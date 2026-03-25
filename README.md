@@ -2,6 +2,8 @@
 
 A plugin for OpenCode — inspired by Claude Code's `/btw` command — that lets you fork a session and run prompts in the background.
 
+**Demo: https://x.com/ig_idcbtw/status/2036773739363434930?s=20**
+
 Similar to Claude Code's `/btw`, this lets you ask questions or run side tasks without interrupting your main conversation thread. The forked session runs independently, keeping your main session context lean and saving tokens.
 
 ## Features
@@ -62,10 +64,6 @@ The forked session will:
 - Notify you when it completes
 
 If the forked session is deleted, the plugin will automatically create a new one and retry.
-
-## Demo
-
-[![Watch the demo on X/Twitter](https://img.shields.io/badge/Watch%20Demo-X/Twitter-1DA1F2?style=for-the-badge&logo=x&logoColor=white)](https://x.com/ig_idcbtw/status/2036773739363434930?s=20)
 
 ## License
 
