@@ -23,16 +23,16 @@
     "background",
     "session"
   ],
-  "author": "",
+  "author": "idc.btw",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/user/btw-opencode.git"
+    "url": "git+https://github.com/aptdnfapt/btw-opencode.git"
   },
   "bugs": {
-    "url": "https://github.com/user/btw-opencode/issues"
+    "url": "https://github.com/aptdnfapt/btw-opencode/issues"
   },
-  "homepage": "https://github.com/user/btw-opencode#readme",
+  "homepage": "https://github.com/aptdnfapt/btw-opencode#readme",
   "devDependencies": {
     "@opencode-ai/plugin": "latest",
     "@types/node": "^25.5.0",
